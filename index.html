@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>School Stocks — Groww-like Dashboard</title>
+  <!-- Tailwind CDN for quick styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* small custom tweaks to make it look cleaner */
+    body { min-height: 100vh; }
+    .card { transition: transform .14s ease, box-shadow .14s ease; }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,.08); }
+    .sparkline { height: 60px; }
+    .pwd-overlay { background: rgba(15,23,42,0.9); }
+    /* groww-like small touches */
+    .gain { color: #12b981; }
+    .loss { color: #ef4444; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 text-slate-900">
+  <div class="min-h-screen flex">
+    <!-- SIDEBAR -->
+    <aside class="w-20 bg-white border-r border-slate-200 p-3 flex flex-col items-center gap-4">
+      <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold">S</div>
+      <button id="btn-refresh" class="p-2 rounded hover:bg-slate-100" title="Refresh">⟳</button>
+      <button id="btn-settings" class="p-2 rounded hover:bg-slate-100" title="Settings">⚙️</button>
+      <button id="btn-demat" class="p-2 rounded hover:bg-slate-100 mt-auto" title="Open Demat / Accounts">🏦</button>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="flex-1 p-6">
+      <header class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-semibold">School Stocks — Dashboard</h1>
+          <p class="text-sm text-slate-500">Demo dashboard (Groww-like) for your students & teachers</p>
+        </div>
+        <div class="flex items-center gap-4">
+          <label class="text-sm text-slate-500">Background</label>
+          <input id="bg-color" type="color" title="Change background" class="w-10 h-8 p-0 border-0" />
+        </div>
+      </header>
+
+      <section id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- 9 cards will be injected here -->
+      </section>
+
+      <!-- DEMAT / Embedded site container (hidden by default) -->
+      <div id="demat-container" class="mt-6 hidden">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-lg font-medium">Demat / Account Integration</h2>
+          <button id="close-demat" class="text-sm text-slate-500">Close</button>
+        </div>
+        <div class="border rounded bg-white h-96 overflow-hidden">
+          <iframe id="demat-iframe" src="about:blank" class="w-full h-full"></iframe>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- PASSWORD / SETUP OVERLAY -->
+  <div id="pwd-overlay" class="fixed inset-0 z-50 flex items-center justify-center pwd-overlay">
+    <div class="bg-white rounded-lg p-6 w-[420px] max-w-[90%]">
+      <h2 id="pwd-title" class="text-lg font-semibold mb-2">Enter password to open dashboard</h2>
+      <p id="pwd-desc" class="text-sm text-slate-500 mb-4">This site is protected for your school students & teachers.</p>
+      <div id="pwd-setup" class="space-y-3 hidden">
+        <input id="new-pwd" type="password" placeholder="Create new password" class="w-full border rounded px-3 py-2" />
+        <input id="new-pwd-confirm" type="password" placeholder="Confirm password" class="w-full border rounded px-3 py-2" />
+        <button id="btn-set-pwd" class="w-full bg-indigo-600 text-white rounded py-2">Set password</button>
+      </div>
+      <div id="pwd-login" class="space-y-3">
+        <input id="pwd-input" type="password" placeholder="Enter password" class="w-full border rounded px-3 py-2" />
+        <div class="flex gap-2">
+          <button id="btn-unlock" class="flex-1 bg-indigo-600 text-white rounded py-2">Unlock</button>
+          <button id="btn-reset" class="flex-1 border rounded py-2">Reset password</button>
+        </div>
+      </div>
+      <p id="pwd-feedback" class="text-sm text-red-600 mt-2"></p>
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL (hidden) -->
+  <div id="settings-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/30">
+    <div class="bg-white rounded-lg p-6 w-[880px] max-w-[95%] max-h-[90vh] overflow-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold">Settings</h3>
+        <button id="close-settings" class="text-slate-500">✕</button>
+      </div>
+
+      <section class="mb-6">
+        <h4 class="font-medium">API Key (Finnhub)</h4>
+        <p class="text-sm text-slate-500 mb-2">Paste your Finnhub API key here. <strong>Warning:</strong> putting the key in the browser is easy but not secure. See instructions below for a secure proxy option.</p>
+        <input id="api-key-input" type="text" class="w-full border rounded px-3 py-2" placeholder="finnhub api key or leave blank to use stored" />
+        <div class="mt-2 flex gap-2">
+          <button id="save-api" class="bg-indigo-600 text-white rounded px-3 py-1">Save key to browser</button>
+          <button id="clear-api" class="border rounded px-3 py-1">Clear key</button>
+        </div>
+      </section>
+
+      <section class="mb-6">
+        <h4 class="font-medium">Stocks (9 slots)</h4>
+        <p class="text-sm text-slate-500 mb-2">Edit the ticker symbol (Finnhub format e.g. <code>NSE:RELIANCE</code>) and the display name you want to show. Click Save when done.</p>
+        <div id="stocks-settings" class="grid grid-cols-1 gap-3">
+          <!-- rows injected here -->
+        </div>
+        <div class="mt-3 flex gap-2">
+          <button id="save-stocks" class="bg-green-600 text-white rounded px-3 py-2">Save stocks</button>
+          <button id="reset-stocks" class="border rounded px-3 py-2">Reset to defaults</button>
+        </div>
+      </section>
+
+      <section class="mb-6">
+        <h4 class="font-medium">Appearance & Misc</h4>
+        <div class="mt-2 grid grid-cols-2 gap-3 items-center">
+          <label class="text-sm">Default background color</label>
+          <input id="appearance-bg" type="color" class="w-16 h-10 p-0 border-0" />
+          <label class="text-sm">Demat / account site URL</label>
+          <input id="demat-url" type="text" placeholder="https://your-demat-site.example" class="border rounded px-3 py-2" />
+        </div>
+        <div class="mt-3">
+          <button id="save-appearance" class="bg-indigo-600 text-white rounded px-3 py-2">Save appearance</button>
+        </div>
+      </section>
+
+      <section class="mb-6">
+        <h4 class="font-medium">Password</h4>
+        <p class="text-sm text-slate-500 mb-2">Change the dashboard unlock password.</p>
+        <input id="chg-pwd-old" type="password" placeholder="Current password" class="w-full border rounded px-3 py-2 mb-2" />
+        <input id="chg-pwd-new" type="password" placeholder="New password" class="w-full border rounded px-3 py-2 mb-2" />
+        <input id="chg-pwd-confirm" type="password" placeholder="Confirm new password" class="w-full border rounded px-3 py-2 mb-2" />
+        <button id="change-pwd-btn" class="bg-red-600 text-white rounded px-3 py-2">Change password</button>
+        <p id="pwd-change-feedback" class="text-sm text-red-600 mt-2"></p>
+      </section>
+
+    </div>
+  </div>
+
+  <script>
+  /* --------------------------- CONFIG (edit before deploy) --------------------------- */
+  // If you want a quick demo you may paste your FINNHUB API KEY directly here (not secure):
+  const FINNHUB_API_KEY = 'd3b92c9r01qo3mjd2i60d3b92c9r01qo3mjd2i6g';
+
+  // Default 9 companies (Finnhub symbols for NSE). You can change these later in Settings.
+  const DEFAULT_STOCKS = [
+    { symbol: 'NSE:RELIANCE', displayname:'organising department' },
+    { symbol: 'NSE:TCS', displayName: 'models department' },
+    { symbol: 'NSE:INFY', displayName: 'tech department' },
+    { symbol: 'NSE:HDFCBANK', displayName: 'foodstalls department' },
+    { symbol: 'NSE:ICICIBANK', displayName: 'stalls department' },
+    { symbol: 'NSE:SBIN', displayName: 'games department' },
+    { symbol: 'NSE:AXISBANK', displayName: 'seminar department' },
+    { symbol: 'NSE:LT', displayName: 'financial department' },
+    { symbol: 'NSE:BAJFINANCE', displayName: 'volunteer department' }
+  ];
+  // END CONFIG
+
+  // Helpers for localStorage
+  function loadJSON(k, fallback) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch(e){ return fallback; } }
+  function saveJSON(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
+
+  // Stock mapping stored as array of 9 objects
+  let stocks = loadJSON('school_stocks_mapping', DEFAULT_STOCKS);
+
+  // Appearance
+  const appearance = loadJSON('school_appearance', { bgColor: '#f8fafc', dematUrl: '' });
+
+  // Finnhub key (stored in browser localStorage when user saves it from settings for convenience)
+  function getApiKey(){ return localStorage.getItem('school_finnhub_key') || FINNHUB_API_KEY || ''; }
+
+  // Password utilities using Web Crypto API (SHA-256)
+  async function sha256hex(msg){ const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg)); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+
+  async function isPasswordSet(){ return !!localStorage.getItem('school_pwd_hash'); }
+  async function checkPassword(plain){ const h = await sha256hex(plain); return h === localStorage.getItem('school_pwd_hash'); }
+  async function setPassword(plain){ const h = await sha256hex(plain); localStorage.setItem('school_pwd_hash', h); }
+  async function changePassword(oldPlain, newPlain){ const ok = await checkPassword(oldPlain); if(!ok) return false; await setPassword(newPlain); return true; }
+
+  // UI bindings
+  const grid = document.getElementById('grid');
+  const pwdOverlay = document.getElementById('pwd-overlay');
+  const pwdLogin = document.getElementById('pwd-login');
+  const pwdSetup = document.getElementById('pwd-setup');
+  const pwdTitle = document.getElementById('pwd-title');
+  const pwdDesc = document.getElementById('pwd-desc');
+  const pwdFeedback = document.getElementById('pwd-feedback');
+
+  document.getElementById('btn-refresh').addEventListener('click', () => loadAll());
+  document.getElementById('btn-settings').addEventListener('click', openSettings);
+  document.getElementById('close-settings').addEventListener('click', closeSettings);
+  document.getElementById('save-api').addEventListener('click', saveApiKey);
+  document.getElementById('clear-api').addEventListener('click', clearApiKey);
+  document.getElementById('save-stocks').addEventListener('click', saveStocksFromUI);
+  document.getElementById('reset-stocks').addEventListener('click', resetStocks);
+  document.getElementById('save-appearance').addEventListener('click', saveAppearance);
+  document.getElementById('btn-unlock').addEventListener('click', tryUnlock);
+  document.getElementById('btn-set-pwd').addEventListener('click', createPassword);
+  document.getElementById('btn-reset').addEventListener('click', showSetupMode);
+  document.getElementById('bg-color').addEventListener('input', e => setBg(e.target.value));
+  document.getElementById('appearance-bg').addEventListener('input', e => document.getElementById('bg-color').value = e.target.value);
+  document.getElementById('btn-demat').addEventListener('click', openDemat);
+  document.getElementById('close-demat').addEventListener('click', () => document.getElementById('demat-container').classList.add('hidden'));
+  document.getElementById('change-pwd-btn').addEventListener('click', async () => {
+    const oldP = document.getElementById('chg-pwd-old').value;
+    const newP = document.getElementById('chg-pwd-new').value;
+    const conf = document.getElementById('chg-pwd-confirm').value;
+    const fb = document.getElementById('pwd-change-feedback'); fb.textContent='';
+    if(!oldP || !newP || !conf){ fb.textContent = 'Please fill all fields.'; return; }
+    if(newP !== conf){ fb.textContent = 'New passwords do not match.'; return; }
+    const ok = await changePassword(oldP, newP);
+    if(!ok) fb.textContent = 'Current password is incorrect.'; else { fb.style.color='green'; fb.textContent = 'Password changed.'; }
+  });
+
+  // Initialize UI
+  (async function init(){
+    // apply saved appearance
+    document.getElementById('bg-color').value = appearance.bgColor || '#f8fafc';
+    document.body.style.background = '';
+    setBg(appearance.bgColor || '#f8fafc');
+    document.getElementById('appearance-bg').value = appearance.bgColor || '#f8fafc';
+
+    // Setup settings stocks UI
+    renderStocksSettings();
+
+    // Password flow
+    const pwdSet = await isPasswordSet();
+    if(!pwdSet){ // first-time: show setup
+      showSetupMode();
+    } else {
+      showLoginMode();
+    }
+  })();
+
+  function setBg(hex){ document.body.style.background = `linear-gradient(180deg, ${hex} 0%, #ffffff 100%)`; document.getElementById('bg-color').value = hex; }
+
+  function showSetupMode(){ pwdSetup.classList.remove('hidden'); pwdLogin.classList.add('hidden'); pwdTitle.textContent = 'Create a password for this dashboard'; pwdDesc.textContent = 'Only users with this password (students & teachers) will be able to open the site.'; pwdFeedback.textContent=''; }
+  function showLoginMode(){ pwdSetup.classList.add('hidden'); pwdLogin.classList.remove('hidden'); pwdTitle.textContent = 'Enter password to open dashboard'; pwdDesc.textContent = 'This site is protected for your school students & teachers.'; pwdFeedback.textContent=''; }
+
+  async function createPassword(){ const a = document.getElementById('new-pwd').value; const b = document.getElementById('new-pwd-confirm').value; pwdFeedback.textContent=''; if(!a || !b){ pwdFeedback.textContent='Enter and confirm password.'; return; } if(a !== b){ pwdFeedback.textContent='Passwords do not match.'; return; } await setPassword(a); showLoginMode(); pwdFeedback.style.color='green'; pwdFeedback.textContent = 'Password saved. Please unlock to continue.'; }
+
+  async function tryUnlock(){ const v = document.getElementById('pwd-input').value; pwdFeedback.textContent=''; if(!v){ pwdFeedback.textContent='Enter password.'; return; } const ok = await checkPassword(v); if(!ok){ pwdFeedback.textContent='Wrong password.'; return; } // success
+    document.getElementById('pwd-overlay').style.display='none'; startApp(); }
+
+  // START main app after unlocking
+  async function startApp(){ await loadAll(); }
+
+  // Fetching data from Finnhub
+  async function fetchQuote(symbol){ const key = getApiKey(); if(!key) return {error:'No API key'}; const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(key)}`; try{ const r = await fetch(url); if(!r.ok) return {error: 'api error'}; const j = await r.json(); return j; }catch(e){ return {error: e.message}; } }
+
+  async function fetchCandle(symbol){ const key = getApiKey(); if(!key) return {error:'No API key'}; const to = Math.floor(Date.now()/1000); const from = to - 30*24*60*60; const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}&token=${encodeURIComponent(key)}`; try{ const r = await fetch(url); if(!r.ok) return {error:'api error'}; const j = await r.json(); return j; }catch(e){ return {error: e.message}; } }
+
+  async function loadAll(){ grid.innerHTML = ''; const promises = stocks.map((s, i) => renderCard(s, i)); await Promise.all(promises); }
+
+  // Render single stock card
+  async function renderCard(stock, idx){ const card = document.createElement('div'); card.className = 'card bg-white border rounded p-4';
+    const title = document.createElement('div'); title.className='flex items-center justify-between';
+    title.innerHTML = `<div><div class=\"text-sm text-slate-500\">${stock.symbol}</div><div class=\"font-medium text-lg\">${stock.displayName}</div></div><div id=\"price-${idx}\" class=\"text-right\"></div>`;
+    card.appendChild(title);
+
+    const spark = document.createElement('canvas'); spark.id = `chart-${idx}`; spark.className = 'sparkline mt-3';
+    card.appendChild(spark);
+
+    const meta = document.createElement('div'); meta.className='mt-3 text-sm text-slate-500 flex justify-between';
+    meta.innerHTML = `<div id=\"meta-${idx}\">Loading...</div><div><button data-idx=\"${idx}\" class=\"py-1 px-2 border rounded text-sm\">Details</button></div>`;
+    card.appendChild(meta);
+
+    grid.appendChild(card);
+
+    // fetch data
+    const [q, c] = await Promise.all([fetchQuote(stock.symbol), fetchCandle(stock.symbol)]);
+    const priceEl = document.getElementById(`price-${idx}`);
+    const metaEl = document.getElementById(`meta-${idx}`);
+
+    if(q && q.error){ priceEl.innerHTML = `<div class=\"text-red-500\">API key missing or error</div>`; metaEl.textContent='Check API key in Settings.'; return; }
+    if(q && q.c === undefined){ priceEl.innerHTML = `<div class=\"text-red-500\">No quote</div>`; metaEl.textContent='No data'; return; }
+
+    const price = q.c; const change = q.d; const pct = q.dp;
+    priceEl.innerHTML = `<div class=\"text-lg font-semibold\">₹${price.toFixed(2)}</div><div class=\"text-sm ${pct>=0?'gain':'loss'}\">${pct>=0?'+':''}${pct.toFixed(2)}%</div>`;
+    metaEl.innerHTML = `Open: ₹${q.o} • High: ₹${q.h} • Low: ₹${q.l} • Prev: ₹${q.pc}`;
+
+    // chart
+    const ctx = document.getElementById(`chart-${idx}`).getContext('2d');
+    let chart; try{
+      if(c && c.s === 'ok'){
+        const labels = c.t.map(ts=>{ const d = new Date(ts*1000); return `${d.getDate()}/${d.getMonth()+1}`; });
+        const data = c.c;
+        chart = new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label: stock.displayName, data, fill: true, tension: 0.3, borderWidth: 1, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ display:false }, y:{ display:false } } } });
+      } else {
+        ctx.font = '12px sans-serif'; ctx.fillText('No chart', 10, 30);
+      }
+    }catch(e){ console.error(e); }
+
+    // Details button toggles a simple popup
+    meta.querySelector('button').addEventListener('click', ()=>{
+      alert(`${stock.displayName} (${stock.symbol})\nPrice: ₹${price.toFixed(2)}\nChange: ${change} (${pct}%)`);
+    });
+  }
+
+  // SETTINGS UI functions
+  function renderStocksSettings(){ const container = document.getElementById('stocks-settings'); container.innerHTML=''; stocks.forEach((s, i)=>{
+    const row = document.createElement('div'); row.className='grid grid-cols-12 gap-2 items-center';
+    row.innerHTML = `
+      <div class=\"col-span-1 text-sm text-slate-500\">#${i+1}</div>
+      <input class=\"col-span-5 border rounded px-2 py-1\" data-field=\"symbol\" data-i=\"${i}\" value=\"${s.symbol}\" />
+      <input class=\"col-span-5 border rounded px-2 py-1\" data-field=\"displayName\" data-i=\"${i}\" value=\"${s.displayName}\" />
+      <button class=\"col-span-1 border rounded px-2 py-1\" data-del=\"${i}\">✖</button>
+    `;
+    container.appendChild(row);
+  });
+  // deletion handler
+  container.querySelectorAll('[data-del]').forEach(btn=> btn.addEventListener('click', (e)=>{ const i = +e.target.getAttribute('data-del'); stocks.splice(i,1); // maintain 9 by pushing default blank
+    if(stocks.length<9) stocks.push({symbol:'NSE:RELIANCE', displayName:'New Stock'});
+    renderStocksSettings();
+  }));
+ }
+
+ function saveStocksFromUI(){ const inputs = document.querySelectorAll('#stocks-settings [data-field]'); inputs.forEach(inp=>{ const i = +inp.getAttribute('data-i'); const f = inp.getAttribute('data-field'); stocks[i][f] = inp.value.trim(); }); saveJSON('school_stocks_mapping', stocks); alert('Saved stocks. Refreshing...'); loadAll(); closeSettings(); }
+
+ function resetStocks(){ if(!confirm('Reset to default 9 stocks?')) return; stocks = DEFAULT_STOCKS.slice(); saveJSON('school_stocks_mapping', stocks); renderStocksSettings(); alert('Reset done.'); }
+
+ function openSettings(){ document.getElementById('settings-modal').classList.remove('hidden'); document.getElementById('api-key-input').value = getApiKey(); document.getElementById('demat-url').value = appearance.dematUrl || ''; }
+ function closeSettings(){ document.getElementById('settings-modal').classList.add('hidden'); }
+
+ function saveApiKey(){ const k = document.getElementById('api-key-input').value.trim(); if(!k){ alert('Enter a key or clear.'); return; } localStorage.setItem('school_finnhub_key', k); alert('API key saved in browser storage (insecure).'); }
+ function clearApiKey(){ localStorage.removeItem('school_finnhub_key'); alert('API key cleared from browser storage.'); }
+
+ function saveAppearance(){ const bg = document.getElementById('appearance-bg').value; const dem = document.getElementById('demat-url').value.trim(); appearance.bgColor = bg; appearance.dematUrl = dem; saveJSON('school_appearance', appearance); document.getElementById('bg-color').value = bg; setBg(bg); alert('Appearance saved.'); }
+
+ async function openDemat(){ const url = appearance.dematUrl; if(!url){ alert('No Demat URL set in Settings.'); openSettings(); return; } document.getElementById('demat-iframe').src = url; document.getElementById('demat-container').classList.remove('hidden'); }
+
+ // Save on unload
+ window.addEventListener('beforeunload', ()=>{ saveJSON('school_stocks_mapping', stocks); saveJSON('school_appearance', appearance); });
+
+  </script>
+</body>
+</html>
